@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MedCheck — Drug Interaction Checker</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:               #f8fafc;
+      --surface:          #ffffff;
+      --border:           #e2e8f0;
+      --accent:           #2563eb;
+      --accent-dark:      #1d4ed8;
+      --accent-light:     #eff6ff;
+      --text:             #1e293b;
+      --muted:            #64748b;
+      --major:            #dc2626;
+      --major-bg:         #fef2f2;
+      --major-border:     #fecaca;
+      --moderate:         #d97706;
+      --moderate-bg:      #fffbeb;
+      --moderate-border:  #fde68a;
+      --minor:            #059669;
+      --minor-bg:         #f0fdf4;
+      --minor-border:     #a7f3d0;
+      --unknown:          #6b7280;
+      --unknown-bg:       #f9fafb;
+      --unknown-border:   #e5e7eb;
+      --radius:           14px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 48px 16px 80px;
+    }
+
+    /* ── Header ── */
+    .site-header {
+      text-align: center;
+      margin-bottom: 36px;
+      width: 100%;
+      max-width: 620px;
+    }
+
+    .logo {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .logo-icon {
+      width: 44px;
+      height: 44px;
+      background: var(--accent);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      box-shadow: 0 2px 8px rgba(37,99,235,0.3);
+    }
+
+    .logo-text {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: var(--text);
+    }
+
+    .logo-text span { color: var(--accent); }
+
+    .tagline {
+      font-size: 15px;
+      color: var(--muted);
+      line-height: 1.65;
+      max-width: 400px;
+      margin: 0 auto 14px;
+    }
+
+    .disclaimer {
+      display: inline-flex;
+      align-items: flex-start;
+      gap: 8px;
+      background: var(--accent-light);
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 12px;
+      color: #1e40af;
+      line-height: 1.5;
+      text-align: left;
+      max-width: 480px;
+    }
+
+    .disclaimer svg { flex-shrink: 0; margin-top: 1px; }
+
+    /* ── Search panel ── */
+    .search-panel {
+      width: 100%;
+      max-width: 620px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px 28px 24px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 4px 20px rgba(0,0,0,0.05);
+      margin-bottom: 24px;
+    }
+
+    .panel-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 18px;
+    }
+
+    .input-row {
+      display: grid;
+      grid-template-columns: 1fr 36px 1fr;
+      gap: 10px;
+      align-items: end;
+      margin-bottom: 18px;
+    }
+
+    @media (max-width: 480px) {
+      .input-row { grid-template-columns: 1fr; }
+      .vs-col { display: none; }
+    }
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .input-group label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+
+    .input-group input {
+      width: 100%;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      padding: 11px 14px;
+      font-size: 15px;
+      color: var(--text);
+      background: var(--bg);
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .input-group input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+    }
+
+    .input-group input::placeholder { color: #94a3b8; }
+
+    .vs-col {
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding-bottom: 11px;
+    }
+
+    .vs-badge {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: var(--bg);
+      border: 1.5px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted);
+    }
+
+    .check-btn {
+      width: 100%;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 9px;
+      padding: 13px 24px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: background 0.15s, box-shadow 0.15s, transform 0.1s;
+      box-shadow: 0 1px 3px rgba(37,99,235,0.3);
+    }
+
+    .check-btn:hover:not(:disabled) {
+      background: var(--accent-dark);
+      box-shadow: 0 2px 8px rgba(37,99,235,0.35);
+    }
+
+    .check-btn:active:not(:disabled) { transform: scale(0.99); }
+    .check-btn:disabled { background: #93c5fd; cursor: not-allowed; box-shadow: none; }
+
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2.5px solid rgba(255,255,255,0.35);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.65s linear infinite;
+      display: none;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Results ── */
+    .results-area { width: 100%; max-width: 620px; }
+
+    /* Error */
+    .error-card {
+      background: #fef2f2;
+      border: 1px solid var(--major-border);
+      border-radius: var(--radius);
+      padding: 20px 22px;
+      display: none;
+    }
+
+    .error-card h4 { font-size: 14px; font-weight: 700; color: var(--major); margin-bottom: 6px; }
+    .error-card p  { font-size: 13px; color: #7f1d1d; line-height: 1.6; }
+
+    /* No interaction */
+    .no-interaction-card {
+      background: var(--minor-bg);
+      border: 1px solid var(--minor-border);
+      border-radius: var(--radius);
+      padding: 32px 24px;
+      text-align: center;
+      display: none;
+    }
+
+    .no-interaction-card .ni-icon { font-size: 36px; margin-bottom: 12px; }
+    .no-interaction-card h3 { font-size: 17px; font-weight: 700; color: #065f46; margin-bottom: 8px; }
+    .no-interaction-card p  { font-size: 13px; color: #047857; line-height: 1.65; max-width: 380px; margin: 0 auto 16px; }
+
+    /* Result card */
+    .result-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 4px 20px rgba(0,0,0,0.05);
+      overflow: hidden;
+      display: none;
+    }
+
+    .result-header {
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .drug-pair {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .drug-name {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .plus {
+      font-size: 16px;
+      color: var(--muted);
+      font-weight: 400;
+    }
+
+    /* Severity badge */
+    .sev-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border-radius: 999px;
+      padding: 5px 13px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+
+    .sev-badge.major    { background: var(--major-bg);    color: var(--major);    border: 1px solid var(--major-border); }
+    .sev-badge.moderate { background: var(--moderate-bg); color: var(--moderate); border: 1px solid var(--moderate-border); }
+    .sev-badge.minor    { background: var(--minor-bg);    color: var(--minor);    border: 1px solid var(--minor-border); }
+    .sev-badge.unknown  { background: var(--unknown-bg);  color: var(--unknown);  border: 1px solid var(--unknown-border); }
+
+    /* Interactions list */
+    .result-body { padding: 22px; }
+
+    .section-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    .interactions-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .int-item {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .int-item-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 11px 15px;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .source-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: var(--accent-light);
+      border: 1px solid #bfdbfe;
+      border-radius: 6px;
+      padding: 3px 9px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--accent-dark);
+    }
+
+    .int-description {
+      font-size: 13px;
+      line-height: 1.7;
+      color: var(--text);
+      padding: 13px 15px;
+    }
+
+    /* Action row */
+    .action-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+
+    .link-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 8px 13px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      text-decoration: none;
+      background: var(--bg);
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .link-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* No-interaction external link */
+    .ni-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--minor);
+      text-decoration: none;
+    }
+
+    .ni-link:hover { text-decoration: underline; }
+
+    /* ── Footer ── */
+    .site-footer {
+      margin-top: 48px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.8;
+    }
+
+    .site-footer a { color: var(--accent); text-decoration: none; }
+    .site-footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+  <!-- ── Header ── -->
+  <header class="site-header">
+    <div class="logo">
+      <div class="logo-icon">💊</div>
+      <span class="logo-text">Med<span>Check</span></span>
+    </div>
+    <p class="tagline">Check drug-drug interactions in seconds. Powered by the US National Library of Medicine.</p>
+    <div class="disclaimer">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      For informational purposes only. Always consult a pharmacist or doctor before making any medication decisions.
+    </div>
+  </header>
+
+  <!-- ── Search panel ── -->
+  <div class="search-panel">
+    <p class="panel-label">Enter two medications to check for known interactions</p>
+
+    <div class="input-row">
+      <div class="input-group">
+        <label for="drug1">First drug</label>
+        <input id="drug1" type="text" placeholder="e.g. Warfarin" autocomplete="off" list="dl1" />
+        <datalist id="dl1"></datalist>
+      </div>
+
+      <div class="vs-col">
+        <span class="vs-badge">+</span>
+      </div>
+
+      <div class="input-group">
+        <label for="drug2">Second drug</label>
+        <input id="drug2" type="text" placeholder="e.g. Aspirin" autocomplete="off" list="dl2" />
+        <datalist id="dl2"></datalist>
+      </div>
+    </div>
+
+    <button class="check-btn" id="checkBtn" onclick="checkInteraction()">
+      <span id="btnLabel">Check Interaction</span>
+      <div class="spinner" id="spinner"></div>
+    </button>
+  </div>
+
+  <!-- ── Results ── -->
+  <div class="results-area">
+
+    <!-- Error -->
+    <div class="error-card" id="errorCard">
+      <h4>Could not retrieve interaction data</h4>
+      <p id="errorMsg">Please check the drug names and try again. Use the generic drug name (e.g. "warfarin" not "Coumadin").</p>
+    </div>
+
+    <!-- No interaction found -->
+    <div class="no-interaction-card" id="noInteractionCard">
+      <div class="ni-icon">✅</div>
+      <h3>No known interaction found</h3>
+      <p id="noIntMsg">No interaction was found in the NLM database. This doesn't mean one doesn't exist — always confirm with a pharmacist.</p>
+      <a class="ni-link" id="niDrugsLink" href="#" target="_blank" rel="noopener">↗ Search Drugs.com for more detail</a>
+    </div>
+
+    <!-- Interaction result -->
+    <div class="result-card" id="resultCard">
+
+      <div class="result-header">
+        <div class="drug-pair">
+          <span class="drug-name" id="rName1">—</span>
+          <span class="plus">+</span>
+          <span class="drug-name" id="rName2">—</span>
+        </div>
+        <span class="sev-badge unknown" id="topBadge">Unknown</span>
+      </div>
+
+      <div class="result-body">
+        <p class="section-label" id="intCountLabel">Interactions found</p>
+        <div class="interactions-list" id="intList"></div>
+        <div class="action-row">
+          <a class="link-btn" id="drugsComLink" href="#" target="_blank" rel="noopener">
+            ↗ Search Drugs.com
+          </a>
+          <a class="link-btn" id="rxnavLink" href="#" target="_blank" rel="noopener">
+            ↗ NLM RxNav source
+          </a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Footer ── */-->
+  <footer class="site-footer">
+    <p>Built by <a href="https://www.linkedin.com/in/tdayashanker" target="_blank" rel="noopener">TD</a> &nbsp;·&nbsp; Interaction data from <a href="https://rxnav.nlm.nih.gov" target="_blank" rel="noopener">NLM RxNav</a> (DrugBank, ONCHigh, NDF-RT)</p>
+    <p>Not a substitute for professional medical advice.</p>
+  </footer>
+
+  <script>
+    // ─────────────────────────────────────────
+    //  Autocomplete — RxNorm approximate match
+    // ─────────────────────────────────────────
+    async function fetchSuggestions(term, datalistId) {
+      if (term.length < 2) return;
+      try {
+        const res  = await fetch(`https://rxnav.nlm.nih.gov/REST/approximateTerm.json?term=${encodeURIComponent(term)}&maxEntries=8`);
+        const data = await res.json();
+        const candidates = data.approximateGroup?.candidate || [];
+        const dl = document.getElementById(datalistId);
+        dl.innerHTML = '';
+        const seen = new Set();
+        candidates.forEach(c => {
+          if (seen.has(c.name)) return;
+          seen.add(c.name);
+          const opt = document.createElement('option');
+          opt.value = c.name;
+          dl.appendChild(opt);
+        });
+      } catch (_) { /* silent */ }
+    }
+
+    document.getElementById('drug1').addEventListener('input', e => fetchSuggestions(e.target.value, 'dl1'));
+    document.getElementById('drug2').addEventListener('input', e => fetchSuggestions(e.target.value, 'dl2'));
+    ['drug1','drug2'].forEach(id => {
+      document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') checkInteraction(); });
+    });
+
+    // ─────────────────────────────────────────
+    //  Resolve drug name → RxCUI
+    // ─────────────────────────────────────────
+    async function getRxCUI(name) {
+      const res  = await fetch(`https://rxnav.nlm.nih.gov/REST/rxcui.json?name=${encodeURIComponent(name)}&search=1`);
+      const data = await res.json();
+      const ids  = data.idGroup?.rxnormId;
+      if (!ids || ids.length === 0) {
+        throw new Error(`"${name}" was not found in the RxNorm database. Try using the generic drug name (e.g. "warfarin" instead of "Coumadin").`);
+      }
+      return { rxcui: ids[0], label: data.idGroup.name || name };
+    }
+
+    // ─────────────────────────────────────────
+    //  Severity helpers
+    // ─────────────────────────────────────────
+    const SEV_RANK = { major: 0, moderate: 1, minor: 2, unknown: 3 };
+
+    function topSeverity(pairs) {
+      let top = 'unknown';
+      pairs.forEach(p => {
+        const s = (p.severity || 'unknown').toLowerCase();
+        if ((SEV_RANK[s] ?? 3) < (SEV_RANK[top] ?? 3)) top = s;
+      });
+      return top;
+    }
+
+    const SEV_ICON = { major: '🔴', moderate: '🟡', minor: '🟢', unknown: '⚪' };
+
+    function cap(str) { return str.charAt(0).toUpperCase() + str.slice(1); }
+
+    // ─────────────────────────────────────────
+    //  Main interaction check
+    // ─────────────────────────────────────────
+    async function checkInteraction() {
+      const d1 = document.getElementById('drug1').value.trim();
+      const d2 = document.getElementById('drug2').value.trim();
+
+      if (!d1 || !d2) {
+        alert('Please enter both drug names before checking.');
+        return;
+      }
+
+      setLoading(true);
+      hideAll();
+
+      try {
+        // 1 — Resolve names to RxCUIs (parallel)
+        const [r1, r2] = await Promise.all([getRxCUI(d1), getRxCUI(d2)]);
+
+        // 2 — Fetch interaction data
+        const res  = await fetch(`https://rxnav.nlm.nih.gov/REST/interaction/list.json?rxcuis=${r1.rxcui}+${r2.rxcui}`);
+        const data = await res.json();
+
+        const groups = data.fullInteractionTypeGroup || [];
+
+        // 3 — Flatten all interaction pairs across all source databases
+        let pairs = [];
+        groups.forEach(group => {
+          (group.fullInteractionType || []).forEach(fit => {
+            (fit.interactionPair || []).forEach(pair => {
+              pairs.push({
+                severity:    (pair.severity    || 'unknown').toLowerCase(),
+                description:  pair.description || 'No description available.',
+                source:       group.sourceName || 'NLM'
+              });
+            });
+          });
+        });
+
+        if (pairs.length === 0) {
+          showNoInteraction(r1.label, r2.label);
+          return;
+        }
+
+        // 4 — Deduplicate by description prefix
+        const seen = new Set();
+        pairs = pairs.filter(p => {
+          const key = p.description.slice(0, 80).toLowerCase();
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+
+        showResult(r1, r2, pairs);
+
+      } catch (err) {
+        showError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    // ─────────────────────────────────────────
+    //  UI state helpers
+    // ─────────────────────────────────────────
+    function setLoading(on) {
+      const btn     = document.getElementById('checkBtn');
+      const label   = document.getElementById('btnLabel');
+      const spinner = document.getElementById('spinner');
+      btn.disabled          = on;
+      label.textContent     = on ? 'Checking…' : 'Check Interaction';
+      spinner.style.display = on ? 'block' : 'none';
+    }
+
+    function hideAll() {
+      ['errorCard','noInteractionCard','resultCard'].forEach(id => {
+        document.getElementById(id).style.display = 'none';
+      });
+    }
+
+    function drugsComSearchURL(label1, label2) {
+      return `https://www.google.com/search?q=site:drugs.com+${encodeURIComponent(label1)}+${encodeURIComponent(label2)}+interaction`;
+    }
+
+    function showError(msg) {
+      document.getElementById('errorMsg').textContent = msg;
+      document.getElementById('errorCard').style.display = 'block';
+    }
+
+    function showNoInteraction(label1, label2) {
+      document.getElementById('noIntMsg').textContent =
+        `No known interaction between ${label1} and ${label2} was found in the NLM RxNav database. This doesn't mean one doesn't exist — always confirm with a pharmacist or doctor.`;
+      document.getElementById('niDrugsLink').href = drugsComSearchURL(label1, label2);
+      document.getElementById('noInteractionCard').style.display = 'block';
+    }
+
+    function showResult(r1, r2, pairs) {
+      // Header drug names
+      document.getElementById('rName1').textContent = r1.label;
+      document.getElementById('rName2').textContent = r2.label;
+
+      // Top severity badge
+      const top   = topSeverity(pairs);
+      const badge = document.getElementById('topBadge');
+      badge.className   = `sev-badge ${top}`;
+      badge.textContent = `${SEV_ICON[top] || '⚪'} ${cap(top)}`;
+
+      // Count label
+      const n = pairs.length;
+      document.getElementById('intCountLabel').textContent =
+        `${n} interaction${n !== 1 ? 's' : ''} found`;
+
+      // Build interaction list
+      const list = document.getElementById('intList');
+      list.innerHTML = '';
+
+      pairs.forEach(pair => {
+        const item = document.createElement('div');
+        item.className = 'int-item';
+        item.innerHTML = `
+          <div class="int-item-header">
+            <span class="sev-badge ${pair.severity}" style="font-size:11px;padding:3px 10px;">
+              ${SEV_ICON[pair.severity] || '⚪'} ${cap(pair.severity)}
+            </span>
+            <span class="source-chip">📚 ${pair.source}</span>
+          </div>
+          <p class="int-description">${pair.description}</p>
+        `;
+        list.appendChild(item);
+      });
+
+      // External links
+      document.getElementById('drugsComLink').href = drugsComSearchURL(r1.label, r2.label);
+      document.getElementById('rxnavLink').href    =
+        `https://rxnav.nlm.nih.gov/REST/interaction/list.json?rxcuis=${r1.rxcui}+${r2.rxcui}`;
+
+      document.getElementById('resultCard').style.display = 'block';
+    }
+  </script>
+
+</body>
+</html>
