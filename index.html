@@ -427,7 +427,7 @@
       <div class="logo-icon">💊</div>
       <span class="logo-text">Med<span>Check</span></span>
     </div>
-    <p class="tagline">Check drug-drug interactions in seconds. Powered by the US National Library of Medicine.</p>
+    <p class="tagline">Check drug-drug interactions in seconds. Powered by FDA-approved drug labels via openFDA.</p>
     <div class="disclaimer">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
       For informational purposes only. Always consult a pharmacist or doctor before making any medication decisions.
@@ -499,7 +499,7 @@
             ↗ Search Drugs.com
           </a>
           <a class="link-btn" id="rxnavLink" href="#" target="_blank" rel="noopener">
-            ↗ NLM RxNav source
+            ↗ openFDA source data
           </a>
         </div>
       </div>
@@ -509,20 +509,30 @@
 
   <!-- ── Footer ── */-->
   <footer class="site-footer">
-    <p>Built by <a href="https://www.linkedin.com/in/tdayashanker" target="_blank" rel="noopener">TD</a> &nbsp;·&nbsp; Interaction data from <a href="https://rxnav.nlm.nih.gov" target="_blank" rel="noopener">NLM RxNav</a> (DrugBank, ONCHigh, NDF-RT)</p>
+    <p>Built by <a href="https://www.linkedin.com/in/tdayashanker" target="_blank" rel="noopener">TD</a> &nbsp;·&nbsp; Data from <a href="https://open.fda.gov/apis/drug/label/" target="_blank" rel="noopener">openFDA Drug Labels</a> (FDA-approved prescribing information)</p>
     <p>Not a substitute for professional medical advice.</p>
   </footer>
 
   <script>
     // ─────────────────────────────────────────
+    //  Safe fetch — never throws on non-JSON
+    // ─────────────────────────────────────────
+    async function safeFetch(url) {
+      const res  = await fetch(url);
+      const text = await res.text();
+      try { return JSON.parse(text); } catch(_) { return null; }
+    }
+
+    // ─────────────────────────────────────────
     //  Autocomplete — RxNorm approximate match
+    //  (RxNorm's name service still works fine — it was
+    //  only the interaction API that was retired.)
     // ─────────────────────────────────────────
     async function fetchSuggestions(term, datalistId) {
       if (term.length < 2) return;
       try {
-        const res  = await fetch(`https://rxnav.nlm.nih.gov/REST/approximateTerm.json?term=${encodeURIComponent(term)}&maxEntries=8`);
-        const data = await res.json();
-        const candidates = data.approximateGroup?.candidate || [];
+        const data = await safeFetch(`https://rxnav.nlm.nih.gov/REST/approximateTerm.json?term=${encodeURIComponent(term)}&maxEntries=8`);
+        const candidates = data?.approximateGroup?.candidate || [];
         const dl = document.getElementById(datalistId);
         dl.innerHTML = '';
         const seen = new Set();
@@ -543,22 +553,10 @@
     });
 
     // ─────────────────────────────────────────
-    //  Resolve drug name → RxCUI
-    // ─────────────────────────────────────────
-    async function getRxCUI(name) {
-      const res  = await fetch(`https://rxnav.nlm.nih.gov/REST/rxcui.json?name=${encodeURIComponent(name)}&search=1`);
-      const data = await res.json();
-      const ids  = data.idGroup?.rxnormId;
-      if (!ids || ids.length === 0) {
-        throw new Error(`"${name}" was not found in the RxNorm database. Try using the generic drug name (e.g. "warfarin" instead of "Coumadin").`);
-      }
-      return { rxcui: ids[0], label: data.idGroup.name || name };
-    }
-
-    // ─────────────────────────────────────────
     //  Severity helpers
     // ─────────────────────────────────────────
     const SEV_RANK = { major: 0, moderate: 1, minor: 2, unknown: 3 };
+    const SEV_ICON = { major: '🔴', moderate: '🟡', minor: '🟢', unknown: '⚪' };
 
     function topSeverity(pairs) {
       let top = 'unknown';
@@ -569,9 +567,82 @@
       return top;
     }
 
-    const SEV_ICON = { major: '🔴', moderate: '🟡', minor: '🟢', unknown: '⚪' };
-
     function cap(str) { return str.charAt(0).toUpperCase() + str.slice(1); }
+
+    // Infer severity from the wording of an FDA label paragraph
+    function inferSeverity(text) {
+      const t = text.toLowerCase();
+      if (/\b(contraindicated|contraindication|do not (use|administer|combine)|should not be (used|administered|combined|coadministered)|avoid (concomitant|coadministration|use)|is not recommended)\b/.test(t)) return 'major';
+      if (/\b(use(d)? with caution|exercise caution|monitor|may (increase|decrease|enhance|reduce|alter|potentiate|prolong|inhibit|induce)|adjust(ment)? (the )?dose|reduce dose|consider (a )?(dose|reduction)|may result in|risk of)\b/.test(t)) return 'moderate';
+      if (/\b(minimal|rare|unlikely|insignificant|no clinically significant)\b/.test(t)) return 'minor';
+      return 'unknown';
+    }
+
+    // ─────────────────────────────────────────
+    //  OpenFDA label lookup
+    //  Tries generic_name first, then brand_name.
+    // ─────────────────────────────────────────
+    async function getDrugLabel(name) {
+      const term = name.toLowerCase().split(/\s+/)[0]; // strip suffixes like "sodium"
+      const fields = ['generic_name', 'brand_name', 'substance_name'];
+      for (const field of fields) {
+        const url = `https://api.fda.gov/drug/label.json?search=openfda.${field}:"${encodeURIComponent(term)}"&limit=1`;
+        const data = await safeFetch(url);
+        if (data?.results?.length > 0) {
+          return data.results[0];
+        }
+      }
+      throw new Error(`"${name}" was not found in the FDA drug label database. Try the generic drug name.`);
+    }
+
+    // Collect all known names for a drug (generic, brand, substance) — lower case
+    function namesForLabel(label, fallback) {
+      const o = label.openfda || {};
+      const names = [
+        ...(o.generic_name   || []),
+        ...(o.brand_name     || []),
+        ...(o.substance_name || []),
+        fallback
+      ];
+      return [...new Set(names.filter(Boolean).map(n => n.toLowerCase()))];
+    }
+
+    // Display label for a drug (capitalise first generic_name if available)
+    function displayName(label, fallback) {
+      const o = label.openfda || {};
+      const n = (o.generic_name?.[0] || o.brand_name?.[0] || fallback || '').toLowerCase();
+      return n.charAt(0).toUpperCase() + n.slice(1);
+    }
+
+    // ─────────────────────────────────────────
+    //  Scan an FDA label section for mentions
+    //  of the other drug. Returns an array of
+    //  matching sentences with severity inferred.
+    // ─────────────────────────────────────────
+    function findMentions(sectionText, targetNames, sectionLabel, sourceDrug) {
+      if (!sectionText) return [];
+      // Split into sentences but keep them reasonably sized
+      const sentences = sectionText
+        .split(/(?<=[.!?])\s+(?=[A-Z(])/)
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+
+      const findings = [];
+      sentences.forEach(s => {
+        const lower = s.toLowerCase();
+        const hit = targetNames.find(n => n.length >= 3 && lower.includes(n));
+        if (hit) {
+          // Force "major" if this came from the Contraindications section
+          const sev = sectionLabel === 'Contraindications' ? 'major' : inferSeverity(s);
+          findings.push({
+            severity:    sev,
+            description: s.length > 600 ? s.slice(0, 600) + '…' : s,
+            source:      `${sourceDrug} FDA label — ${sectionLabel}`
+          });
+        }
+      });
+      return findings;
+    }
 
     // ─────────────────────────────────────────
     //  Main interaction check
@@ -589,44 +660,47 @@
       hideAll();
 
       try {
-        // 1 — Resolve names to RxCUIs (parallel)
-        const [r1, r2] = await Promise.all([getRxCUI(d1), getRxCUI(d2)]);
+        // 1 — Fetch FDA labels for both drugs in parallel
+        const [label1, label2] = await Promise.all([getDrugLabel(d1), getDrugLabel(d2)]);
 
-        // 2 — Fetch interaction data
-        const res  = await fetch(`https://rxnav.nlm.nih.gov/REST/interaction/list.json?rxcuis=${r1.rxcui}+${r2.rxcui}`);
-        const data = await res.json();
+        const names1   = namesForLabel(label1, d1);
+        const names2   = namesForLabel(label2, d2);
+        const display1 = displayName(label1, d1);
+        const display2 = displayName(label2, d2);
 
-        const groups = data.fullInteractionTypeGroup || [];
+        // 2 — Scan each label's Drug Interactions and Contraindications sections
+        //     for mentions of the other drug
+        const sections = [
+          ['drug_interactions', 'Drug Interactions'],
+          ['contraindications', 'Contraindications']
+        ];
 
-        // 3 — Flatten all interaction pairs across all source databases
         let pairs = [];
-        groups.forEach(group => {
-          (group.fullInteractionType || []).forEach(fit => {
-            (fit.interactionPair || []).forEach(pair => {
-              pairs.push({
-                severity:    (pair.severity    || 'unknown').toLowerCase(),
-                description:  pair.description || 'No description available.',
-                source:       group.sourceName || 'NLM'
-              });
-            });
-          });
+        sections.forEach(([key, lbl]) => {
+          const t1 = (label1[key] || []).join(' ');
+          const t2 = (label2[key] || []).join(' ');
+          pairs.push(...findMentions(t1, names2, lbl, display1));
+          pairs.push(...findMentions(t2, names1, lbl, display2));
         });
 
         if (pairs.length === 0) {
-          showNoInteraction(r1.label, r2.label);
+          showNoInteraction(display1, display2);
           return;
         }
 
-        // 4 — Deduplicate by description prefix
+        // 3 — Deduplicate by description prefix
         const seen = new Set();
         pairs = pairs.filter(p => {
-          const key = p.description.slice(0, 80).toLowerCase();
+          const key = p.description.slice(0, 100).toLowerCase();
           if (seen.has(key)) return false;
           seen.add(key);
           return true;
         });
 
-        showResult(r1, r2, pairs);
+        // 4 — Sort by severity (major first)
+        pairs.sort((a, b) => (SEV_RANK[a.severity] ?? 3) - (SEV_RANK[b.severity] ?? 3));
+
+        showResult({ label: display1 }, { label: display2 }, pairs);
 
       } catch (err) {
         showError(err.message);
@@ -664,7 +738,7 @@
 
     function showNoInteraction(label1, label2) {
       document.getElementById('noIntMsg').textContent =
-        `No known interaction between ${label1} and ${label2} was found in the NLM RxNav database. This doesn't mean one doesn't exist — always confirm with a pharmacist or doctor.`;
+        `No interaction between ${label1} and ${label2} was found in the FDA drug label database. This doesn't mean one doesn't exist — always confirm with a pharmacist or doctor.`;
       document.getElementById('niDrugsLink').href = drugsComSearchURL(label1, label2);
       document.getElementById('noInteractionCard').style.display = 'block';
     }
@@ -707,7 +781,7 @@
       // External links
       document.getElementById('drugsComLink').href = drugsComSearchURL(r1.label, r2.label);
       document.getElementById('rxnavLink').href    =
-        `https://rxnav.nlm.nih.gov/REST/interaction/list.json?rxcuis=${r1.rxcui}+${r2.rxcui}`;
+        `https://api.fda.gov/drug/label.json?search=openfda.generic_name:"${encodeURIComponent(r1.label.toLowerCase())}"+AND+openfda.generic_name:"${encodeURIComponent(r2.label.toLowerCase())}"&limit=1`;
 
       document.getElementById('resultCard').style.display = 'block';
     }
